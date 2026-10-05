@@ -1,0 +1,87 @@
+### environment
+2026年10月 5日 週一 15時50分22秒 CST
+ProductName:		macOS ProductVersion:		15.6 BuildVersion:		24G84 
+Now drawing from 'AC Power'
+ripes sha256: bea887fcf020c1dda1f44177c19c27a13f3b93c625b17194ac37e3d421a34fc4
+minirubik: 231796cc48868f4ea276f652139b6bebbad0cd02
+### 1. ISA check (multest.s must fail to assemble)
+ERROR: Error during assembly:
+INFO: Unknown opcode 'mul'
+### 2. simulation rate
+--- RV32_ISS alu_loop.s run 1
+
+Program exited with code: 0
+===== instructions retired
+100000004
+===== wall-clock model execution time (ms)
+2351
+--- RV32_ISS alu_loop.s run 2
+
+Program exited with code: 0
+===== instructions retired
+100000004
+===== wall-clock model execution time (ms)
+2448
+--- RV32_ISS alu_loop.s run 3
+
+Program exited with code: 0
+===== instructions retired
+100000004
+===== wall-clock model execution time (ms)
+2178
+--- RV32_ISS mem_loop.s run 1
+
+Program exited with code: 0
+===== instructions retired
+50000006
+===== wall-clock model execution time (ms)
+1420
+--- RV32_ISS mem_loop.s run 2
+
+Program exited with code: 0
+===== instructions retired
+50000006
+===== wall-clock model execution time (ms)
+1353
+--- RV32_ISS mem_loop.s run 3
+
+Program exited with code: 0
+===== instructions retired
+50000006
+===== wall-clock model execution time (ms)
+1368
+--- RV32_5S mem_loop.s run 1
+
+Program exited with code: 0
+===== instructions retired
+50000006
+===== wall-clock model execution time (ms)
+636978
+--- RV32_5S mem_loop.s run 2
+
+Program exited with code: 0
+===== instructions retired
+50000006
+===== wall-clock model execution time (ms)
+535803
+--- RV32_5S mem_loop.s run 3
+
+Program exited with code: 0
+===== instructions retired
+50000006
+===== wall-clock model execution time (ms)
+554586
+### 3. host bytes per guest byte (max RSS, bytes)
+run 1  fill_1k.s  69337088
+run 1  fill_64k.s  83558400
+run 1  fill_256k.s  128761856
+run 1  fill_1m.s  308740096
+run 2  fill_1k.s  68321280
+run 2  fill_64k.s  83623936
+run 2  fill_256k.s  129007616
+run 2  fill_1m.s  308723712
+run 3  fill_1k.s  68583424
+run 3  fill_64k.s  83476480
+run 3  fill_256k.s  128958464
+run 3  fill_1m.s  308871168
+### done
