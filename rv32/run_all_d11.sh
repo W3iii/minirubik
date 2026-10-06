@@ -15,7 +15,7 @@ echo "### state iret result"
 n=0 ok=0 max=0 worst="" sum=0
 while read cube; do
     src=$(OUT=build/d11.s ./build_asm.sh $cube 11)
-    out=$($RIPES --mode cli -t asm --proc RV32_ISS --src $src --iret 2>&1)
+    out=$($RIPES --mode cli -t asm --proc RV32_ISS --src $src --iret 2>&1 | tr -d '\000')
     iret=$(print -r -- "$out" | awk '/instructions retired/ {getline; print}')
     result=FAIL
     print -r -- "$out" | grep -qx OK && result=OK

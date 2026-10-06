@@ -5,6 +5,9 @@
 # between "# >>> RENDER" and "# <<< RENDER" lines, which build_asm.sh keeps
 # for the GUI build and deletes for the CLI build.
 #
+# The path is not written during the search: each 36-byte frame holds the
+# face and turn count of its depth, and "found" rebuilds the moves.
+#
 # Search registers (no calls inside the search, so ra and tp hold data):
 #   s0 bound                      s2 g = depth of the child
 #   s3 child 2p   s4 child o      s5 child r      (child under face f, t turns)
@@ -172,14 +175,9 @@ turn_loop:
     lbu  t3, 0(t3)
     add  t5, t3, s2
     bltu s0, t5, after_child    # g + pdb > bound
-    slli t0, s9, 1              # path[g - 1] = 3f + t - 1
-    add  t0, t0, s9
-    add  t0, t0, s10
-    addi t0, t0, -1
-    add  t1, gp, s2
-    sb   t0, 0(t1)
-    or   t0, t3, t4             # both tables are 0 only at the solved state
-    beqz t0, solved
+    bnez t4, descend            # both tables are 0 only at the solved state
+    beqz t3, found
+descend:
     addi sp, sp, -36            # descend: save this depth
     sw   s6, 0(sp)
     sw   s7, 4(sp)
@@ -240,6 +238,27 @@ face_ok:
 iteration_done:                 # costs are integers, so the next bound
     addi s0, s0, 1              # is bound + 1; no minimum is tracked
     j    iteration
+
+    # ---- found: rebuild the path from the frame stack ----
+    # The moves are not stored while searching: every frame already holds
+    # its face (12) and turn count (16), and the last move is in s9, s10.
+found:                          # s2 = g = number of moves
+    mv   t0, sp                 # frame of depth g - 2, then upwards
+    add  t1, gp, s2             # &path[g - 1]
+    mv   t2, s9
+    mv   t3, s10
+path_loop:
+    slli t4, t2, 1              # move = 3f + t - 1
+    add  t4, t4, t2
+    add  t4, t4, t3
+    addi t4, t4, -1
+    sb   t4, 0(t1)
+    addi t1, t1, -1
+    bge  gp, t1, solved         # wrote path[0]
+    lw   t2, 12(t0)
+    lw   t3, 16(t0)
+    addi t0, t0, 36
+    j    path_loop
 
     # ---- report: print the moves, then apply them and check (T5) ----
 solved:                         # s2 = number of moves
