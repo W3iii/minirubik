@@ -1,6 +1,7 @@
 /* Generate the read-only tables for the RV32I solver and check them.
  *
- * Writes ../rv32/tables.c (C arrays) and ../rv32/tables.s (assembler data),
+ * Writes ../rv32/tables.c (C arrays) and ../rv32/tables.s (assembler data;
+ * there perm_q holds byte offsets 2p and hperm is indexed by 2p),
  * and checks on the host:
  *   H1  max(pdb, hperm) <= exact distance for all 3,674,160 states
  *   H2  every table is fully populated, with its maximum and solved entry
@@ -92,15 +93,20 @@ static void emit(int solved_pair)
 #define ARRAY(cname, ctype, sdir, count, expr)                                  \
     do {                                                                       \
         fprintf(c, "const %s %s[%d] = {", ctype, cname, count);               \
-        fprintf(s, "%s:", cname);                                              \
         for (int i = 0; i < (count); i++) {                                    \
-            if (i % 16 == 0) { fprintf(c, "\n   "); fprintf(s, "\n    %s ", sdir); } \
-            else fprintf(s, ",");                                              \
+            if (i % 16 == 0) fprintf(c, "\n   ");                            \
             fprintf(c, " %d,", (int) (expr));                                  \
+        }                                                                      \
+        fprintf(c, "\n};\n");                                                 \
+    } while (0)
+#define ARRAY_S(sname, sdir, count, expr)                                      \
+    do {                                                                       \
+        fprintf(s, "%s:", sname);                                              \
+        for (int i = 0; i < (count); i++) {                                    \
+            fprintf(s, i % 16 == 0 ? "\n    %s " : ",", sdir);               \
             fprintf(s, "%d", (int) (expr));                                    \
         }                                                                      \
-        fprintf(c, "\n};\n");                                                  \
-        fprintf(s, "\n");                                                      \
+        fprintf(s, "\n");                                                     \
     } while (0)
     /* halfword tables first so that they stay 2-byte aligned */
     ARRAY("perm_q", "uint16_t", ".half", 3 * NPERM, perm_q[i / NPERM][i % NPERM]);
@@ -109,10 +115,21 @@ static void emit(int solved_pair)
     ARRAY("hperm", "uint8_t", ".byte", NPERM, hperm[i]);
     ARRAY("pdb", "uint8_t", ".byte", NPAIR * PDB_STRIDE, pdb[i >> 10][i & 1023]);
     fclose(c);
+    /* The assembler keeps a permutation rank p as the byte offset 2p into
+     * perm_q, which saves a shift per node. So perm_q holds 2p', and hperm
+     * is indexed by 2p: entry 2p is hperm[p], odd entries are 0xFF padding. */
+    fprintf(s, "# perm_q holds byte offsets 2p; hperm is indexed by 2p\n");
+    ARRAY_S("perm_q", ".half", 3 * NPERM, 2 * perm_q[i / NPERM][i % NPERM]);
+    ARRAY_S("ori_q", ".half", 3 * NORI, ori_q[i / NORI][i % NORI]);
+    ARRAY_S("pair_q", ".byte", 3 * NPAIR, pair_q[i / NPAIR][i % NPAIR]);
+    ARRAY_S("hperm", ".byte", 2 * NPERM, (i & 1) ? 0xFF : hperm[i >> 1]);
+    ARRAY_S("pdb", ".byte", NPAIR * PDB_STRIDE, pdb[i >> 10][i & 1023]);
     fclose(s);
-    printf("tables: perm_q %d B, ori_q %d B, pair_q %d B, hperm %d B, pdb %d B, total %d B\n",
+    printf("C tables  : perm_q %d B, ori_q %d B, pair_q %d B, hperm %d B, pdb %d B, total %d B\n",
            3 * NPERM * 2, 3 * NORI * 2, 3 * NPAIR, NPERM, NPAIR * PDB_STRIDE,
            3 * NPERM * 2 + 3 * NORI * 2 + 3 * NPAIR + NPERM + NPAIR * PDB_STRIDE);
+    printf("asm tables: hperm indexed by 2p is %d B, total %d B\n", 2 * NPERM,
+           3 * NPERM * 2 + 3 * NORI * 2 + 3 * NPAIR + 2 * NPERM + NPAIR * PDB_STRIDE);
 }
 
 int main(void)

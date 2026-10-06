@@ -5,8 +5,10 @@
  *
  * Heuristic: max(pdb[pair << 10 | o], hperm[p]). Both tables hold exact
  * distances in abstractions of the cube, so the heuristic never
- * overestimates and IDA* returns a shortest solution. h is 0 only at the
- * solved state, so "h == 0" doubles as the goal test.
+ * overestimates and IDA* returns a shortest solution. Both tables are 0
+ * only at the solved state, which doubles as the goal test. The search
+ * tests the two tables one after the other instead of taking the maximum,
+ * and raises the bound by one per iteration.
  */
 #include "ida.h"
 #include "tables.h"
@@ -41,7 +43,6 @@ int ida_solve(const ida_state_t *start, uint8_t *path)
     if (bound == 0)
         return 0;
     for (;;) {
-        uint32_t next = 0xFF;
         int d = 0;
         node_p[0] = child_p[0] = start->p;
         node_o[0] = child_o[0] = start->o;
@@ -69,15 +70,17 @@ int ida_solve(const ida_state_t *start, uint8_t *path)
             turn[d]++;
             COUNT_NODE();
 
-            uint32_t h = heuristic(child_p[d], child_o[d], child_r[d]);
-            uint32_t g = (uint32_t) d + 1, cost = g + h;
-            if (cost > bound) {
-                if (cost < next)
-                    next = cost;
+            /* hperm first: on its own it prunes about half of all nodes,
+             * which then skip the pdb lookup */
+            uint32_t g = (uint32_t) d + 1;
+            uint32_t hp = hperm[child_p[d]];
+            if (g + hp > bound)
                 continue;
-            }
+            uint32_t hd = pdb[(child_r[d] << 10) + child_o[d]];
+            if (g + hd > bound)
+                continue;
             path[d] = (uint8_t) ((f << 1) + f + turn[d] - 1); /* 3f + turn - 1 */
-            if (h == 0)
+            if ((hp | hd) == 0) /* both are 0 only at the solved state */
                 return (int) g;
             d++; /* h >= 1 and g + h <= bound <= 11 keep d below 11 */
             node_p[d] = child_p[d] = child_p[d - 1];
@@ -86,7 +89,7 @@ int ida_solve(const ida_state_t *start, uint8_t *path)
             face[d] = turn[d] = 0;
             last[d] = (uint8_t) f;
         }
-        bound = next;
+        bound++; /* costs are integers; no minimum over pruned nodes is kept */
     }
 }
 

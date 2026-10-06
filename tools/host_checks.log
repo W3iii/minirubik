@@ -1,7 +1,7 @@
 ### environment
-2026年10月 6日 週二 01時29分20秒 CST
+2026年10月 6日 週二 15時21分25秒 CST
 Apple clang version 17.0.0 (clang-1700.0.13.5)
-minirubik: f316af579c08571d80b2444df0f542c1ecd64224
+minirubik: 822bc36-dirty
 ### gen_tables (H1, H2)
 H2 perm_q : 3 faces x 5040 entries, each a permutation, fourth power is identity
 H2 ori_q  : 3 faces x 729 entries, each a permutation, fourth power is identity
@@ -9,7 +9,8 @@ H2 pair_q : 3 faces x 42 entries, each a permutation, fourth power is identity
 H2 hperm  : 5040 entries populated, solved entry 0, max 7
 H2 pdb    : 42 x 729 entries populated, solved entry [23][0] = 0, max 8, padding 0xFF
 H1 h <= d : all 3674160 states (diameter 11); mean h 6.174, h == d for 91311 states
-tables: perm_q 30240 B, ori_q 4374 B, pair_q 126 B, hperm 5040 B, pdb 43008 B, total 82788 B
+C tables  : perm_q 30240 B, ori_q 4374 B, pair_q 126 B, hperm 5040 B, pdb 43008 B, total 82788 B
+asm tables: hperm indexed by 2p is 10080 B, total 87828 B
 ### verify (H3)
 H3: all 3674160 states solved, every length equals the exact distance, every path solves
 distance  states    mean nodes  max nodes  hardest state
@@ -17,13 +18,13 @@ distance  states    mean nodes  max nodes  hardest state
        1        9          5.0          9  13642571111111
        2       54          8.5         15  13752641122133
        3      321         12.0         21  16723541122133
-       4     1847         16.2         67  63514271111111
+       4     1847         16.2         76  63514271111111
        5     9992         23.8        283  24516371111111
        6    50136         42.5        873  25643171111111
        7   227536        121.5       2855  63245171111111
-       8   870072        540.9       7784  56241371111111
+       8   870072        541.0       7784  56241371111111
        9  1887748       2592.0      26738  31245671111111
-      10   623800       9180.9      82353  64231571111111
+      10   623800       9181.0      82353  64231571111111
       11     2644      42419.3     224937  14325671111111
-wall clock: 39.4 s
+wall clock: 55.2 s
 ### done

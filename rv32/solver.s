@@ -6,15 +6,18 @@
 # for the GUI build and deletes for the CLI build.
 #
 # Search registers (no calls inside the search, so ra and tp hold data):
-#   s0 bound      s1 next bound   s2 g = depth of the child
-#   s3 child p    s4 child o      s5 child r      (child under face f, t turns)
-#   s6 node p     s7 node o       s8 node r       (node being expanded)
+#   s0 bound                      s2 g = depth of the child
+#   s3 child 2p   s4 child o      s5 child r      (child under face f, t turns)
+#   s6 node 2p    s7 node o       s8 node r       (node being expanded)
+# A permutation rank p is kept as the byte offset 2p into perm_q; tables.s
+# stores perm_q as 2p' and indexes hperm by 2p, so no shift is needed.
 #   s9 face f     s10 turns t     s11 previous face (3 = none)
 #   a2 perm_q row for f   a3 ori_q row   a4 pair_q row
 #   a5 pdb        a6 hperm        a7 perm_q row stride (10080 bytes)
 #   tp perm_q     ra ori_q        a1 pair_q       gp path - 1
 #   t6 constant 3 sp frame stack, 36 bytes per depth
     .text
+    .globl main
 main:
     la   s6, perm_arr
     la   s7, ori_arr
@@ -112,7 +115,7 @@ not6:
     sub  s5, s5, t1
 
     # ---- search setup ----
-    mv   s6, s3                 # root node
+    slli s6, s3, 1              # root node, permutation as byte offset 2p
     mv   s7, s4
     mv   s8, s5
     la   tp, perm_q
@@ -137,7 +140,6 @@ root_max:
     mv   s0, t3                 # bound = h(root)
 
 iteration:
-    li   s1, 255                # next bound
     li   s2, 1
     mv   s3, s6
     mv   s4, s7
@@ -152,8 +154,7 @@ iteration:
 
     # ---- one quarter turn of face f applied to the child ----
 turn_loop:
-    slli t0, s3, 1
-    add  t0, a2, t0
+    add  t0, a2, s3             # s3 is already the byte offset 2p
     lhu  s3, 0(t0)
     slli t1, s4, 1
     add  t1, a3, t1
@@ -161,24 +162,24 @@ turn_loop:
     add  t2, a4, s5
     lbu  s5, 0(t2)
     addi s10, s10, 1
-    slli t3, s5, 10             # h = max(pdb[r << 10 | o], hperm[p])
+    add  t4, a6, s3             # hperm first: it alone prunes about half
+    lbu  t4, 0(t4)
+    add  t5, t4, s2
+    bltu s0, t5, after_child    # g + hperm > bound
+    slli t3, s5, 10             # then pdb[r << 10 | o]
     add  t3, t3, s4
     add  t3, t3, a5
     lbu  t3, 0(t3)
-    add  t4, a6, s3
-    lbu  t4, 0(t4)
-    bgeu t3, t4, h_done
-    mv   t3, t4
-h_done:
-    add  t5, t3, s2             # cost = g + h
-    bltu s0, t5, prune
+    add  t5, t3, s2
+    bltu s0, t5, after_child    # g + pdb > bound
     slli t0, s9, 1              # path[g - 1] = 3f + t - 1
     add  t0, t0, s9
     add  t0, t0, s10
     addi t0, t0, -1
     add  t1, gp, s2
     sb   t0, 0(t1)
-    beqz t3, solved             # h == 0 only at the solved state
+    or   t0, t3, t4             # both tables are 0 only at the solved state
+    beqz t0, solved
     addi sp, sp, -36            # descend: save this depth
     sw   s6, 0(sp)
     sw   s7, 4(sp)
@@ -200,9 +201,6 @@ h_done:
     mv   a3, ra
     mv   a4, a1
     j    face_check
-prune:
-    bgeu t5, s1, after_child    # next = min(next, cost)
-    mv   s1, t5
 after_child:
     bne  s10, t6, turn_loop     # more turns of this face
 next_face:
@@ -239,8 +237,8 @@ face_ok:
     lw   a4, 32(sp)
     addi sp, sp, 36
     j    after_child
-iteration_done:
-    mv   s0, s1
+iteration_done:                 # costs are integers, so the next bound
+    addi s0, s0, 1              # is bound + 1; no minimum is tracked
     j    iteration
 
     # ---- report: print the moves, then apply them and check (T5) ----
