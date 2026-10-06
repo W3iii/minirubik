@@ -18,7 +18,7 @@
 #   s6 node 8p    s7 node o       s8 node r       (node being expanded)
 #   tp pblock     ra ori_q + 1458 a1 pair_q       a5 pdb
 #   a2 constant 1 a3 constant 2   a4 resume address for expand
-#   gp path - 1   sp frame stack, 24 bytes per depth
+#   gp path - 1   sp frame stack in .data, 24 bytes per depth, 11 depths
     .text
     .globl main
 main:
@@ -130,6 +130,7 @@ not6:
     addi gp, gp, -1
     li   a2, 1
     li   a3, 2
+    la   sp, frames_end         # frame stack sized at assembly time
     slli t3, s8, 10             # h(root) = max(pdb, hperm)
     add  t3, t3, s7
     add  t3, t3, a5
@@ -436,6 +437,9 @@ print_done:
     la   s7, ori_arr
     la   s8, tmp_arr
     li   s0, 0                  # k
+# >>> RENDER
+    jal  render                 # the scrambled cube before the first move
+# <<< RENDER
 apply_loop:
     bgeu s0, s2, apply_done
     la   t0, path
@@ -526,8 +530,91 @@ finish:
     li   a7, 10
     ecall
 
+# >>> RENDER
+    # ---- draw the cube on the LED Matrix as an unfolded net ----
+    # 6 faces in a 4 x 3 grid of face slots, 2 x 2 facelets per face, each
+    # facelet 4 x 3 LEDs, one LED of gap between face slots: 35 x 20 LEDs.
+    # Reads perm_arr (s6) and ori_arr (s7); keeps s0, s2, s6-s11 and t6.
+render:
+    li   a0, LED_MATRIX_0_BASE
+    li   a1, LED_MATRIX_0_WIDTH
+    slli a1, a1, 2              # bytes per LED row, row-major y * WIDTH + x
+    la   a2, facelet_xy
+    la   a3, sticker
+    la   a4, palette
+    li   s1, 0                  # position P
+r_pos:
+    li   s3, 0                  # cubie at P (the fixed corner holds cubie 0)
+    li   s4, 0                  # its twist
+    beqz s1, r_fixed
+    add  t0, s6, s1
+    lbu  s3, -1(t0)             # perm_arr[P - 1] + 1
+    addi s3, s3, 1
+    add  t0, s7, s1
+    lbu  s4, -1(t0)             # ori_arr[P - 1]
+r_fixed:
+    slli s5, s3, 1              # 3 * cubie: its row in sticker
+    add  s5, s5, s3
+    li   t5, 0                  # facelet k
+r_facelet:
+    sub  t0, t5, s4             # sticker j = (k - o) mod 3
+    bgez t0, r_mod
+    addi t0, t0, 3
+r_mod:
+    add  t0, t0, s5
+    add  t0, a3, t0
+    lbu  t0, 0(t0)
+    slli t0, t0, 2
+    add  t0, a4, t0
+    lw   t1, 0(t0)              # colour
+    lbu  t2, 0(a2)              # x
+    lbu  t3, 1(a2)              # y
+    addi a2, a2, 2
+    slli t2, t2, 2
+    add  t2, a0, t2
+r_row:                          # + y rows; the renderer runs only in the GUI
+    beqz t3, r_draw             # build, so a short loop beats a multiply
+    add  t2, t2, a1
+    addi t3, t3, -1
+    j    r_row
+r_draw:
+    li   t3, 3                  # 3 rows of 4 LEDs
+r_block:
+    sw   t1, 0(t2)
+    sw   t1, 4(t2)
+    sw   t1, 8(t2)
+    sw   t1, 12(t2)
+    add  t2, t2, a1
+    addi t3, t3, -1
+    bnez t3, r_block
+    addi t5, t5, 1
+    bltu t5, t6, r_facelet      # t6 = 3
+    addi s1, s1, 1
+    li   t0, 8
+    bltu s1, t0, r_pos
+    ret
+# <<< RENDER
+
     .data
 expect:     .word @EXPECT@
+frames:     .word 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
+            .word 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
+            .word 0,0,0,0,0,0, 0,0,0,0,0,0, 0,0,0,0,0,0
+frames_end:                     # 11 frames of 6 words: depth never exceeds 11
+# >>> RENDER
+palette:    .word 0xFFFFFF, 0xFFFF00, 0x00C000, 0x0000FF, 0xFF0000, 0xFF8000
+                                # U white, D yellow, F green, B blue, R red, L orange
+# For position P = 0..7 (0 is the fixed corner) and facelet k = 0..2, in
+# clockwise order seen from outside starting at the U/D facelet: the pixel
+# (x, y) of the facelet's top-left LED in the unfolded net.
+facelet_xy: .byte 9,3, 4,7, 9,7,  13,3, 13,7, 18,7,  13,14, 18,10, 13,10
+            .byte 9,14, 9,10, 4,10,  13,0, 22,7, 27,7,  13,17, 27,10, 22,10
+            .byte 9,17, 0,10, 31,10,  9,0, 31,7, 0,7
+# For cubie c = 0..7 and sticker j = 0..2 (same order, in its home slot):
+# the palette index of its colour. With twist o, sticker j shows on facelet
+# (j + o) mod 3, so facelet k shows sticker (k - o) mod 3.
+sticker:    .byte 0,5,2, 0,2,4, 1,4,2, 1,2,5, 0,4,3, 1,3,4, 1,5,3, 0,3,5
+# <<< RENDER
 path:       .byte 0,0,0,0,0,0,0,0,0,0,0,0
 perm_arr:   .byte 0,0,0,0,0,0,0,0
 ori_arr:    .byte 0,0,0,0,0,0,0,0
