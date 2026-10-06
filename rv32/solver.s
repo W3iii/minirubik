@@ -5,20 +5,20 @@
 # between "# >>> RENDER" and "# <<< RENDER" lines, which build_asm.sh keeps
 # for the GUI build and deletes for the CLI build.
 #
-# The path is not written during the search: each 36-byte frame holds the
-# face and turn count of its depth, and "found" rebuilds the moves.
+# The search is unrolled: one block per face and turn, so every table
+# offset is a constant. A permutation rank p is kept as the byte offset 8p
+# into pblock, which holds the three next permutations and hperm[p]. A child
+# that passes both tests calls expand with jal; the 24-byte frame keeps the
+# node, the previous face, the resume address and the move, and pop returns
+# with jr. The path is rebuilt from the frames when a solution is found.
 #
 # Search registers (no calls inside the search, so ra and tp hold data):
-#   s0 bound                      s2 g = depth of the child
-#   s3 child 2p   s4 child o      s5 child r      (child under face f, t turns)
-#   s6 node 2p    s7 node o       s8 node r       (node being expanded)
-# A permutation rank p is kept as the byte offset 2p into perm_q; tables.s
-# stores perm_q as 2p' and indexes hperm by 2p, so no shift is needed.
-#   s9 face f     s10 turns t     s11 previous face (3 = none)
-#   a2 perm_q row for f   a3 ori_q row   a4 pair_q row
-#   a5 pdb        a6 hperm        a7 perm_q row stride (10080 bytes)
-#   tp perm_q     ra ori_q        a1 pair_q       gp path - 1
-#   t6 constant 3 sp frame stack, 36 bytes per depth
+#   s0 bound      s2 g = depth of the child       s11 previous face (3 = none)
+#   s3 child 8p   s4 child o      s5 child r      (child of the current block)
+#   s6 node 8p    s7 node o       s8 node r       (node being expanded)
+#   tp pblock     ra ori_q + 1458 a1 pair_q       a5 pdb
+#   a2 constant 1 a3 constant 2   a4 resume address for expand
+#   gp path - 1   sp frame stack, 24 bytes per depth
     .text
     .globl main
 main:
@@ -118,23 +118,24 @@ not6:
     sub  s5, s5, t1
 
     # ---- search setup ----
-    slli s6, s3, 1              # root node, permutation as byte offset 2p
+    slli s6, s3, 3              # root node: permutation as byte offset 8p
     mv   s7, s4
     mv   s8, s5
-    la   tp, perm_q
+    la   tp, pblock
     la   ra, ori_q
+    addi ra, ra, 1458           # middle row, so faces are offsets -1458, 0, +1458
     la   a1, pair_q
     la   a5, pdb
-    la   a6, hperm
-    li   a7, 10080
     la   gp, path
     addi gp, gp, -1
-    slli t3, s8, 10             # h(root)
+    li   a2, 1
+    li   a3, 2
+    slli t3, s8, 10             # h(root) = max(pdb, hperm)
     add  t3, t3, s7
     add  t3, t3, a5
     lbu  t3, 0(t3)
-    add  t4, a6, s6
-    lbu  t4, 0(t4)
+    add  t4, tp, s6
+    lbu  t4, 6(t4)
     bgeu t3, t4, root_max
     mv   t3, t4
 root_max:
@@ -144,82 +145,221 @@ root_max:
 
 iteration:
     li   s2, 1
+    li   s11, 3                 # root has no previous face
+    j    face0
+
+    # ---- the nine children of a node, one block per face and turn ----
+    # Each block turns the child once more and tests it. A child that
+    # passes both tests calls expand with jal, so the frame records where
+    # to resume: the block of the next turn.
+face0:                         # face R: child starts as the node
     mv   s3, s6
     mv   s4, s7
     mv   s5, s8
-    li   s9, 0
-    li   s10, 0
-    li   s11, 3
-    mv   a2, tp
-    mv   a3, ra
-    mv   a4, a1
-    j    face_check
-
-    # ---- one quarter turn of face f applied to the child ----
-turn_loop:
-    add  t0, a2, s3             # s3 is already the byte offset 2p
-    lhu  s3, 0(t0)
+f0t1:                          # R (move 0)
+    add  t0, tp, s3
+    lhu  s3, 0(t0)             # 8p' = pblock[8p + 0]
     slli t1, s4, 1
-    add  t1, a3, t1
-    lhu  s4, 0(t1)
-    add  t2, a4, s5
+    add  t1, t1, ra
+    lhu  s4, -1458(t1)
+    add  t2, a1, s5
     lbu  s5, 0(t2)
-    addi s10, s10, 1
-    add  t4, a6, s3             # hperm first: it alone prunes about half
-    lbu  t4, 0(t4)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
     add  t5, t4, s2
-    bltu s0, t5, after_child    # g + hperm > bound
-    slli t3, s5, 10             # then pdb[r << 10 | o]
+    bltu s0, t5, f0t2
+    slli t3, s5, 10
     add  t3, t3, s4
     add  t3, t3, a5
-    lbu  t3, 0(t3)
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
     add  t5, t3, s2
-    bltu s0, t5, after_child    # g + pdb > bound
-    bnez t4, descend            # both tables are 0 only at the solved state
-    beqz t3, found
-descend:
-    addi sp, sp, -36            # descend: save this depth
-    sw   s6, 0(sp)
-    sw   s7, 4(sp)
-    sw   s8, 8(sp)
-    sw   s9, 12(sp)
-    sw   s10, 16(sp)
-    sw   s11, 20(sp)
-    sw   a2, 24(sp)
-    sw   a3, 28(sp)
-    sw   a4, 32(sp)
-    mv   s6, s3
-    mv   s7, s4
-    mv   s8, s5
-    mv   s11, s9
-    li   s9, 0
-    li   s10, 0
-    addi s2, s2, 1
-    mv   a2, tp
-    mv   a3, ra
-    mv   a4, a1
-    j    face_check
-after_child:
-    bne  s10, t6, turn_loop     # more turns of this face
-next_face:
-    addi s9, s9, 1
-    li   s10, 0
+    bltu s0, t5, f0t2
+    li   t6, 0
+    li   t2, 0
+    jal  a4, expand
+f0t2:                          # R2 (move 1)
+    add  t0, tp, s3
+    lhu  s3, 0(t0)             # 8p' = pblock[8p + 0]
+    slli t1, s4, 1
+    add  t1, t1, ra
+    lhu  s4, -1458(t1)
+    add  t2, a1, s5
+    lbu  s5, 0(t2)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
+    add  t5, t4, s2
+    bltu s0, t5, f0t3
+    slli t3, s5, 10
+    add  t3, t3, s4
+    add  t3, t3, a5
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
+    add  t5, t3, s2
+    bltu s0, t5, f0t3
+    li   t6, 1
+    li   t2, 0
+    jal  a4, expand
+f0t3:                          # R' (move 2)
+    add  t0, tp, s3
+    lhu  s3, 0(t0)             # 8p' = pblock[8p + 0]
+    slli t1, s4, 1
+    add  t1, t1, ra
+    lhu  s4, -1458(t1)
+    add  t2, a1, s5
+    lbu  s5, 0(t2)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
+    add  t5, t4, s2
+    bltu s0, t5, face0_done
+    slli t3, s5, 10
+    add  t3, t3, s4
+    add  t3, t3, a5
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
+    add  t5, t3, s2
+    bltu s0, t5, face0_done
+    li   t6, 2
+    li   t2, 0
+    jal  a4, expand
+face0_done:
+    beq  s11, a2, face2         # skip face 1 if the move into this node was B
+face1:                         # face B: child starts as the node
     mv   s3, s6
     mv   s4, s7
     mv   s5, s8
-    add  a2, a2, a7
-    addi a3, a3, 1458
-    addi a4, a4, 42
-face_check:
-    bne  s9, s11, face_ok       # same-face pruning
-    addi s9, s9, 1
-    add  a2, a2, a7
-    addi a3, a3, 1458
-    addi a4, a4, 42
-face_ok:
-    bltu s9, t6, turn_loop
-    li   t0, 1                  # all faces done: back up one depth
-    beq  s2, t0, iteration_done
+f1t1:                          # B (move 3)
+    add  t0, tp, s3
+    lhu  s3, 2(t0)             # 8p' = pblock[8p + 2]
+    slli t1, s4, 1
+    add  t1, t1, ra
+    lhu  s4, 0(t1)
+    add  t2, a1, s5
+    lbu  s5, 42(t2)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
+    add  t5, t4, s2
+    bltu s0, t5, f1t2
+    slli t3, s5, 10
+    add  t3, t3, s4
+    add  t3, t3, a5
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
+    add  t5, t3, s2
+    bltu s0, t5, f1t2
+    li   t6, 3
+    li   t2, 1
+    jal  a4, expand
+f1t2:                          # B2 (move 4)
+    add  t0, tp, s3
+    lhu  s3, 2(t0)             # 8p' = pblock[8p + 2]
+    slli t1, s4, 1
+    add  t1, t1, ra
+    lhu  s4, 0(t1)
+    add  t2, a1, s5
+    lbu  s5, 42(t2)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
+    add  t5, t4, s2
+    bltu s0, t5, f1t3
+    slli t3, s5, 10
+    add  t3, t3, s4
+    add  t3, t3, a5
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
+    add  t5, t3, s2
+    bltu s0, t5, f1t3
+    li   t6, 4
+    li   t2, 1
+    jal  a4, expand
+f1t3:                          # B' (move 5)
+    add  t0, tp, s3
+    lhu  s3, 2(t0)             # 8p' = pblock[8p + 2]
+    slli t1, s4, 1
+    add  t1, t1, ra
+    lhu  s4, 0(t1)
+    add  t2, a1, s5
+    lbu  s5, 42(t2)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
+    add  t5, t4, s2
+    bltu s0, t5, face1_done
+    slli t3, s5, 10
+    add  t3, t3, s4
+    add  t3, t3, a5
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
+    add  t5, t3, s2
+    bltu s0, t5, face1_done
+    li   t6, 5
+    li   t2, 1
+    jal  a4, expand
+face1_done:
+    beq  s11, a3, pop           # skip face 2 if the move into this node was D
+face2:                         # face D: child starts as the node
+    mv   s3, s6
+    mv   s4, s7
+    mv   s5, s8
+f2t1:                          # D (move 6)
+    add  t0, tp, s3
+    lhu  s3, 4(t0)             # 8p' = pblock[8p + 4]
+    slli t1, s4, 1
+    add  t1, t1, ra
+    lhu  s4, 1458(t1)
+    add  t2, a1, s5
+    lbu  s5, 84(t2)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
+    add  t5, t4, s2
+    bltu s0, t5, f2t2
+    slli t3, s5, 10
+    add  t3, t3, s4
+    add  t3, t3, a5
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
+    add  t5, t3, s2
+    bltu s0, t5, f2t2
+    li   t6, 6
+    li   t2, 2
+    jal  a4, expand
+f2t2:                          # D2 (move 7)
+    add  t0, tp, s3
+    lhu  s3, 4(t0)             # 8p' = pblock[8p + 4]
+    slli t1, s4, 1
+    add  t1, t1, ra
+    lhu  s4, 1458(t1)
+    add  t2, a1, s5
+    lbu  s5, 84(t2)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
+    add  t5, t4, s2
+    bltu s0, t5, f2t3
+    slli t3, s5, 10
+    add  t3, t3, s4
+    add  t3, t3, a5
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
+    add  t5, t3, s2
+    bltu s0, t5, f2t3
+    li   t6, 7
+    li   t2, 2
+    jal  a4, expand
+f2t3:                          # D' (move 8)
+    add  t0, tp, s3
+    lhu  s3, 4(t0)             # 8p' = pblock[8p + 4]
+    slli t1, s4, 1
+    add  t1, t1, ra
+    lhu  s4, 1458(t1)
+    add  t2, a1, s5
+    lbu  s5, 84(t2)
+    add  t0, tp, s3
+    lbu  t4, 6(t0)              # hperm[p']
+    add  t5, t4, s2
+    bltu s0, t5, face2_done
+    slli t3, s5, 10
+    add  t3, t3, s4
+    add  t3, t3, a5
+    lbu  t3, 0(t3)              # pdb[r << 10 | o]
+    add  t5, t3, s2
+    bltu s0, t5, face2_done
+    li   t6, 8
+    li   t2, 2
+    jal  a4, expand
+face2_done:
+pop:                            # all faces done: back up one depth
+    beq  s2, a2, iteration_done
     addi s2, s2, -1
     mv   s3, s6                 # parent's child is this depth's node
     mv   s4, s7
@@ -227,41 +367,50 @@ face_ok:
     lw   s6, 0(sp)
     lw   s7, 4(sp)
     lw   s8, 8(sp)
-    lw   s9, 12(sp)
-    lw   s10, 16(sp)
-    lw   s11, 20(sp)
-    lw   a2, 24(sp)
-    lw   a3, 28(sp)
-    lw   a4, 32(sp)
-    addi sp, sp, 36
-    j    after_child
+    lw   s11, 12(sp)
+    lw   t0, 16(sp)
+    addi sp, sp, 24
+    jr   t0                     # resume at the next turn of the parent
 iteration_done:                 # costs are integers, so the next bound
     addi s0, s0, 1              # is bound + 1; no minimum is tracked
     j    iteration
 
+    # ---- expand a child: t3 pdb, t4 hperm, t6 move, t2 face, a4 resume ----
+expand:
+    bnez t4, descend            # both tables are 0 only at the solved state
+    beqz t3, found
+descend:
+    addi sp, sp, -24
+    sw   s6, 0(sp)
+    sw   s7, 4(sp)
+    sw   s8, 8(sp)
+    sw   s11, 12(sp)
+    sw   a4, 16(sp)
+    sw   t6, 20(sp)
+    mv   s6, s3
+    mv   s7, s4
+    mv   s8, s5
+    mv   s11, t2
+    addi s2, s2, 1
+    beqz s11, face1             # same-face pruning: skip face 0 after R
+    j    face0
+
     # ---- found: rebuild the path from the frame stack ----
-    # The moves are not stored while searching: every frame already holds
-    # its face (12) and turn count (16), and the last move is in s9, s10.
+    # Each frame holds the move into its child at 20(sp); the last move is t6.
 found:                          # s2 = g = number of moves
-    mv   t0, sp                 # frame of depth g - 2, then upwards
+    mv   t0, sp
     add  t1, gp, s2             # &path[g - 1]
-    mv   t2, s9
-    mv   t3, s10
 path_loop:
-    slli t4, t2, 1              # move = 3f + t - 1
-    add  t4, t4, t2
-    add  t4, t4, t3
-    addi t4, t4, -1
-    sb   t4, 0(t1)
+    sb   t6, 0(t1)
     addi t1, t1, -1
     bge  gp, t1, solved         # wrote path[0]
-    lw   t2, 12(t0)
-    lw   t3, 16(t0)
-    addi t0, t0, 36
+    lw   t6, 20(t0)
+    addi t0, t0, 24
     j    path_loop
 
     # ---- report: print the moves, then apply them and check (T5) ----
 solved:                         # s2 = number of moves
+    li   t6, 3                  # the search used t6 for the move
     li   s0, 0                  # k
 print_loop:
     bgeu s0, s2, print_done

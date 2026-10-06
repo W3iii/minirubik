@@ -1,10 +1,10 @@
 ### environment
-2026年10月 6日 週二 15時29分34秒 CST
-minirubik: 11cd890-dirty
+2026年10月 6日 週二 15時40分09秒 CST
+minirubik: 863a128-dirty
 ripes sha256: bea887fcf020c1dda1f44177c19c27a13f3b93c625b17194ac37e3d421a34fc4
 riscv64-unknown-elf-gcc (g6afcc4f6d) 16.1.0
 ### code size (bytes of linked .text, RENDER=0)
-asm: 1272
+asm: 1796
 gcc: 1960
 ### tests on RV32_ISS
 --- asm 12345671111111 (expect 0 moves)
@@ -30,7 +30,7 @@ OK
 
 Program exited with code: 0
 ===== instructions retired
-2406
+2335
 --- gcc 24173562322133
 D2 B R' 
 moves: 3
@@ -46,7 +46,7 @@ OK
 
 Program exited with code: 0
 ===== instructions retired
-2897999
+2165004
 --- gcc 21345671111111
 R B' D2 R' B R' B' R D2 R B 
 moves: 11
@@ -62,7 +62,7 @@ OK
 
 Program exited with code: 0
 ===== instructions retired
-5940837
+4441108
 --- gcc 14325671111111
 B2 R' B R D B2 D R' B' R D' 
 moves: 11
@@ -78,7 +78,7 @@ OK
 
 Program exited with code: 0
 ===== instructions retired
-4465170
+3343906
 --- gcc 54721631111111
 B2 R' B R' D' B R2 B R B D' 
 moves: 11

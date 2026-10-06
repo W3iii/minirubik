@@ -1,7 +1,7 @@
 ### environment
-2026年10月 6日 週二 15時21分25秒 CST
+2026年10月 6日 週二 15時38分59秒 CST
 Apple clang version 17.0.0 (clang-1700.0.13.5)
-minirubik: 822bc36-dirty
+minirubik: 863a128-dirty
 ### gen_tables (H1, H2)
 H2 perm_q : 3 faces x 5040 entries, each a permutation, fourth power is identity
 H2 ori_q  : 3 faces x 729 entries, each a permutation, fourth power is identity
@@ -10,7 +10,7 @@ H2 hperm  : 5040 entries populated, solved entry 0, max 7
 H2 pdb    : 42 x 729 entries populated, solved entry [23][0] = 0, max 8, padding 0xFF
 H1 h <= d : all 3674160 states (diameter 11); mean h 6.174, h == d for 91311 states
 C tables  : perm_q 30240 B, ori_q 4374 B, pair_q 126 B, hperm 5040 B, pdb 43008 B, total 82788 B
-asm tables: hperm indexed by 2p is 10080 B, total 87828 B
+asm tables: pblock 40320 B, total 87828 B
 ### verify (H3)
 H3: all 3674160 states solved, every length equals the exact distance, every path solves
 distance  states    mean nodes  max nodes  hardest state
@@ -26,5 +26,5 @@ distance  states    mean nodes  max nodes  hardest state
        9  1887748       2592.0      26738  31245671111111
       10   623800       9181.0      82353  64231571111111
       11     2644      42419.3     224937  14325671111111
-wall clock: 55.2 s
+wall clock: 55.6 s
 ### done
