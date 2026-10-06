@@ -1,0 +1,66 @@
+### environment
+2026年10月 6日 星期二 19時08分01秒 CST
+minirubik: ad21eca
+ripes sha256: bea887fcf020c1dda1f44177c19c27a13f3b93c625b17194ac37e3d421a34fc4
+### tests on RV32_5S
+--- asm 12345671111111 (expect 0 moves)
+
+moves: 0
+OK
+
+Program exited with code: 0
+===== cycles
+1129
+===== instructions retired
+788
+===== wall-clock model execution time (ms)
+38
+--- asm 24173562322133 (expect 3 moves)
+D2 B R' 
+moves: 3
+OK
+
+Program exited with code: 0
+===== cycles
+3077
+===== instructions retired
+2337
+===== wall-clock model execution time (ms)
+22
+--- asm 21345671111111 (expect 11 moves)
+R B' D2 R' B R' B' R D2 R B 
+moves: 11
+OK
+
+Program exited with code: 0
+===== cycles
+2676174
+===== instructions retired
+2165006
+===== wall-clock model execution time (ms)
+4352
+--- asm 14325671111111 (expect 11 moves)
+B2 R' B R D B2 D R' B' R D' 
+moves: 11
+OK
+
+Program exited with code: 0
+===== cycles
+5487933
+===== instructions retired
+4441110
+===== wall-clock model execution time (ms)
+8922
+--- asm 54721631111111 (expect 11 moves)
+B2 R' B R' D' B R2 B R B D' 
+moves: 11
+OK
+
+Program exited with code: 0
+===== cycles
+4130682
+===== instructions retired
+3343908
+===== wall-clock model execution time (ms)
+6645
+### done
